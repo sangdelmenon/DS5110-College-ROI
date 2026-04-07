@@ -1,0 +1,23 @@
+# R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# Large data files — download from College Scorecard directly
+data/*.csv
+data/*.xlsx
+data/*.zip
+
+# Rendered outputs (optional: remove these lines if you want to commit the HTML)
+*.html
+*.pdf
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Output figures (optional)
+output/*.png
+output/*.pdf
