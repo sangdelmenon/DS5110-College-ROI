@@ -133,7 +133,7 @@ inst <- inst |>
     high_roi = ifelse(ROI > median(ROI, na.rm = TRUE), 1, 0),
     # STEM-heavy flag: sum of STEM-related PCIP field shares
     stem_share = rowSums(
-      select(., PCIP11, PCIP14, PCIP15, PCIP26, PCIP27, PCIP40),
+      pick(PCIP11, PCIP14, PCIP15, PCIP26, PCIP27, PCIP40),
       na.rm = TRUE
     ),
     is_stem_heavy = as.integer(stem_share > 0.3),
