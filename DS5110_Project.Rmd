@@ -49,6 +49,7 @@ We define **Return on Investment (ROI)** as the relationship between what a stud
 
 ```{r libraries}
 library(MASS)       # load before tidyverse to avoid masking dplyr::select
+library(broom)
 library(tidyverse)
 library(corrplot)
 library(caret)
