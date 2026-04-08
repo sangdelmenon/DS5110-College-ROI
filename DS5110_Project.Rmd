@@ -4,15 +4,13 @@ subtitle: "Modeling the Return on Investment of U.S. Higher Education Using the 
 author: "Sangeeth Deleep Menon, Benoy Joseph, Rohit Biju, Bryan Samuel James"
 date: "`r Sys.Date()`"
 output:
-  html_document:
+  pdf_document:
     toc: true
-    toc_float: true
     toc_depth: 3
-    theme: flatly
     highlight: tango
-    code_folding: show
     fig_width: 9
     fig_height: 6
+    latex_engine: xelatex
 ---
 
 ```{r setup, include=FALSE}
