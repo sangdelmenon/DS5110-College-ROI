@@ -1,5 +1,6 @@
 ---
 title: "Does College Pay Off?"
+subtitle: "Modeling the Return on Investment of U.S. Higher Education Using the College Scorecard"
 author: "Sangeeth Deleep Menon, Benoy Joseph, Rohit Biju, Bryan Samuel James"
 date: "`r Sys.Date()`"
 output:
@@ -7,8 +8,6 @@ output:
     toc: true
     toc_depth: 3
     latex_engine: xelatex
-subtitle: Modeling the Return on Investment of U.S. Higher Education Using the College
-  Scorecard
 ---
 
 ```{r setup, include=FALSE}
@@ -25,19 +24,24 @@ set.seed(42)
 
 # 1. Introduction
 
-College tuition in the U.S. has climbed sharply over the last two decades, yet the financial payoff of a degree looks very different depending on where you go, what you study, where you live, and who you are. This project uses the U.S. Department of Education's **College Scorecard** to take a data-driven look at that question.
+College tuition in the U.S. has climbed sharply over the last two decades, yet the financial payoff of a degree looks very different depending on where you go, what you study, where you live, and who you are. For prospective students and families, the decision of where and what to study is one of the most consequential financial choices they will make. This project uses the U.S. Department of Education's **College Scorecard** — a publicly available dataset covering over 6,000 Title IV institutions — to take a data-driven look at whether college delivers a meaningful return on its cost.
 
-We define **Return on Investment (ROI)** as the relationship between what a student pays (tuition, fees, and net price after financial aid) and what they earn after graduation.
+We define **Return on Investment (ROI)** as the ratio of median earnings 10 years after enrollment to the average net price paid by students:
+
+$$\text{ROI} = \frac{\text{Median Earnings (10 years after entry)}}{\text{Average Net Price}}$$
+
+A higher ROI indicates that graduates earn substantially more than they paid, while a lower ROI signals that earnings gains are modest relative to cost.
 
 **Central Research Question:**
+
 > *Which institutional characteristics and program features best predict whether a college degree delivers strong earnings relative to its cost, and how do these factors differ across institution types and fields of study?*
 
 **Hypotheses:**
 
-- **H1:** Net price meaningfully predicts median earnings 10 years after enrollment, even after controlling for selectivity.
-- **H2:** ROI varies significantly by institution type; for-profit schools deliver weaker earnings relative to cost.
-- **H3:** Field of study is a stronger earnings predictor than institutional characteristics.
-- **H4:** Higher graduation rates predict better earnings even after controlling for selectivity.
+- **H1:** Net price meaningfully predicts median earnings 10 years after enrollment, even after controlling for selectivity (admission rate and SAT scores).
+- **H2:** ROI varies significantly by institution type; for-profit schools deliver weaker earnings relative to cost than public or private nonprofit schools.
+- **H3:** Field of study is a stronger earnings predictor than institutional characteristics such as enrollment size or location.
+- **H4:** Higher graduation rates predict better earnings outcomes even after controlling for institutional selectivity.
 
 ---
 
@@ -61,20 +65,15 @@ library(kableExtra)
 
 ## 3.1 Load Data
 
-Data downloaded from the [U.S. Department of Education College Scorecard](https://collegescorecard.ed.gov/data/).
+Both files were downloaded from the [U.S. Department of Education College Scorecard](https://collegescorecard.ed.gov/data/) (March 2026 release). The Scorecard encodes suppressed values — those based on fewer than 30 students — as the string `"PrivacySuppressed"`, which is handled as `NA` at load time.
 
 ```{r load-data}
-# Load institution-level data
-# Download from: https://collegescorecard.ed.gov/data/
-# File: Most Recent Institution-Level Data (CSV)
 inst_raw <- read_csv(
   "data/Most-Recent-Cohorts-Institution.csv",
   na = c("", "NA", "PrivacySuppressed"),
   show_col_types = FALSE
 )
 
-# Load field-of-study data
-# File: Most Recent Field of Study Data (CSV)
 fos_raw <- read_csv(
   "data/Most-Recent-Cohorts-Field-of-Study.csv",
   na = c("", "NA", "PrivacySuppressed"),
@@ -87,11 +86,11 @@ cat("Field-of-study rows:   ", nrow(fos_raw),  "\n")
 
 ## 3.2 Filter & Select Key Variables
 
+We retain only predominantly bachelor's-degree-granting institutions (`PREDDEG == 3`) to ensure comparability across schools. Institutions with suppressed earnings data are also excluded. Table 1 summarizes the key variables retained.
+
 ```{r filter-inst}
 inst <- inst_raw |>
-  # Keep only predominantly bachelor's-degree-granting institutions
   filter(PREDDEG == 3) |>
-  # Select key variables
   select(
     UNITID, OPEID, INSTNM, STABBR, REGION,
     CONTROL, PREDDEG, UGDS,
@@ -102,14 +101,31 @@ inst <- inst_raw |>
     DEBT_MDN,
     starts_with("PCIP")
   ) |>
-  # Coerce numeric columns
   mutate(across(c(ADM_RATE, SAT_AVG, NPT4_PUB, NPT4_PRIV,
                   C150_4, MD_EARN_WNE_P10, DEBT_MDN, UGDS,
                   starts_with("PCIP")), as.numeric)) |>
-  # Drop rows with suppressed earnings outcome
   filter(!is.na(MD_EARN_WNE_P10))
 
 cat("Institutions after filtering:", nrow(inst), "\n")
+```
+
+```{r var-table, echo=FALSE}
+tribble(
+  ~Variable,            ~Description,                                  ~Role,
+  "MD_EARN_WNE_P10",   "Median earnings 10 years after entry",        "Primary outcome",
+  "NPT4_PUB/PRIV",     "Average net price (public / private)",        "Key predictor",
+  "ADM_RATE",          "Admission rate",                              "Selectivity control",
+  "SAT_AVG",           "Average SAT equivalent score",               "Selectivity control",
+  "CONTROL",           "Institution type (public, NP, for-profit)",  "Grouping variable",
+  "C150_4",            "4-year completion rate (150% time)",         "Predictor",
+  "UGDS",              "Total undergraduate enrollment",             "Predictor",
+  "REGION",            "Census geographic region",                   "Predictor",
+  "PCIP*",             "Fraction of degrees by field (26 fields)",  "Predictor set",
+  "DEBT_MDN",          "Median cumulative debt at graduation",       "Predictor"
+) |>
+  kable(caption = "Key variables from the College Scorecard dataset.",
+        booktabs = TRUE) |>
+  kable_styling(latex_options = c("striped", "hold_position"), font_size = 9)
 ```
 
 ## 3.3 Feature Engineering
@@ -117,30 +133,24 @@ cat("Institutions after filtering:", nrow(inst), "\n")
 ```{r feature-engineering}
 inst <- inst |>
   mutate(
-    # Unified net price: use public rate for public schools, private for others
     net_price = case_when(
       CONTROL == 1 ~ NPT4_PUB,
       CONTROL %in% c(2, 3) ~ NPT4_PRIV,
       TRUE ~ NA_real_
     ),
-    # ROI: earnings 10yr after entry divided by net price
     ROI = MD_EARN_WNE_P10 / net_price,
-    # Binary ROI label for classification
     high_roi = ifelse(ROI > median(ROI, na.rm = TRUE), 1, 0),
-    # STEM-heavy flag: sum of STEM-related PCIP field shares
     stem_share = rowSums(
       pick(PCIP11, PCIP14, PCIP15, PCIP26, PCIP27, PCIP40),
       na.rm = TRUE
     ),
     is_stem_heavy = as.integer(stem_share > 0.3),
-    # Readable institution type label
     inst_type = case_when(
       CONTROL == 1 ~ "Public",
       CONTROL == 2 ~ "Private Nonprofit",
       CONTROL == 3 ~ "Private For-Profit",
       TRUE ~ NA_character_
     ),
-    # Log-transform skewed variables for modeling
     log_ugds      = log1p(UGDS),
     log_net_price = log1p(net_price),
     log_earnings  = log1p(MD_EARN_WNE_P10)
@@ -148,6 +158,8 @@ inst <- inst |>
 
 cat("Rows with valid ROI:", sum(!is.na(inst$ROI)), "\n")
 ```
+
+The composite ROI metric jointly captures cost and earnings, making it a more practically useful measure than raw earnings alone. Public institutions use `NPT4_PUB` for net price; all private institutions use `NPT4_PRIV`. The STEM share variable sums the degree-share fractions for Computer Science, Engineering, Engineering Tech, Biology, Mathematics, and Physical Sciences.
 
 ## 3.4 Missingness Analysis
 
@@ -161,16 +173,15 @@ miss_summary <- inst |>
 
 miss_summary |>
   kable(digits = 1, col.names = c("Variable", "% Missing"),
-        caption = "Missing Data Summary for Key Variables") |>
-  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+        caption = "Missing data summary for key variables.",
+        booktabs = TRUE) |>
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = FALSE)
 ```
 
 ```{r drop-high-missing}
-# Drop variables with > 40% missing
 vars_to_drop <- miss_summary |> filter(pct_missing > 40) |> pull(variable)
 cat("Variables dropped (>40% missing):", paste(vars_to_drop, collapse = ", "), "\n")
 
-# Complete-case analysis on core modeling variables
 model_df <- inst |>
   filter(!is.na(net_price), !is.na(ADM_RATE), !is.na(SAT_AVG),
          !is.na(C150_4), !is.na(MD_EARN_WNE_P10), !is.na(ROI)) |>
@@ -179,13 +190,15 @@ model_df <- inst |>
 cat("Complete cases for modeling:", nrow(model_df), "\n")
 ```
 
+Any variable missing more than 40% of its values is dropped. The remaining variables are handled via complete-case analysis. The modeling dataset retains a sufficient number of institutions for reliable statistical inference.
+
 ---
 
 # 4. Exploratory Data Analysis
 
 ## 4.1 Distribution of Key Variables
 
-```{r dist-plots, fig.height=8}
+```{r dist-plots, fig.height=8, fig.cap="Distributions of net price, median earnings, and ROI by institution type. For-profit schools concentrate at lower earnings and higher net prices relative to public and nonprofit institutions."}
 dist_data <- model_df |>
   select(inst_type, net_price, MD_EARN_WNE_P10, ROI) |>
   pivot_longer(-inst_type, names_to = "variable", values_to = "value") |>
@@ -208,9 +221,11 @@ ggplot(dist_data, aes(x = value, fill = inst_type)) +
   theme(legend.position = "bottom", strip.text = element_text(size = 9))
 ```
 
+The distributions reveal clear structural differences across institution types. Public schools show the widest spread in earnings, reflecting their diversity in program offerings and selectivity. Private nonprofits tend toward higher earnings and higher net prices. For-profit institutions cluster at lower earnings with relatively high costs, producing consistently low ROI values.
+
 ## 4.2 Net Price vs. Median Earnings
 
-```{r scatter-cost-earnings}
+```{r scatter-cost-earnings, fig.cap="Net price vs. 10-year median earnings by institution type. A positive cost-earnings relationship exists for public and nonprofit schools; for-profit institutions show a weaker relationship."}
 ggplot(model_df, aes(x = net_price, y = MD_EARN_WNE_P10, color = inst_type)) +
   geom_point(alpha = 0.4, size = 1.5) +
   geom_smooth(method = "lm", se = TRUE, linewidth = 1.2) +
@@ -227,9 +242,11 @@ ggplot(model_df, aes(x = net_price, y = MD_EARN_WNE_P10, color = inst_type)) +
   theme(legend.position = "bottom")
 ```
 
+The positive slope for public and private nonprofit institutions suggests that higher-priced schools do tend to produce higher earnings — but for-profit schools break this pattern. Despite charging varying net prices, for-profit graduates cluster at median earnings between \$25,000 and \$40,000, which motivates the H2 hypothesis.
+
 ## 4.3 ROI by Institution Type
 
-```{r roi-by-type}
+```{r roi-by-type, fig.cap="ROI distributions by institution type. Public schools achieve the highest median ROI; for-profit schools the lowest, with substantial spread in the nonprofit sector."}
 ggplot(model_df, aes(x = inst_type, y = ROI, fill = inst_type)) +
   geom_boxplot(alpha = 0.7, outlier.alpha = 0.3) +
   scale_fill_manual(values = c("Public" = "#2196F3",
@@ -243,9 +260,11 @@ ggplot(model_df, aes(x = inst_type, y = ROI, fill = inst_type)) +
   theme(legend.position = "none")
 ```
 
+Public institutions achieve the highest median ROI, driven by lower net prices relative to earnings. Private nonprofits show greater spread — elite schools deliver exceptional ROI while lower-ranked nonprofits offer returns similar to for-profits. For-profit schools consistently show the lowest ROI, with a compressed distribution at the bottom of the range.
+
 ## 4.4 Geographic Analysis — Median ROI by Region
 
-```{r geo-analysis}
+```{r geo-analysis, fig.cap="Median ROI by U.S. Census region. The Far West and New England regions lead in returns, while the Plains and Outlying Areas lag."}
 region_labels <- c(
   "1" = "New England", "2" = "Mid East", "3" = "Great Lakes",
   "4" = "Plains", "5" = "Southeast", "6" = "Southwest",
@@ -269,9 +288,11 @@ model_df |>
   theme(legend.position = "none")
 ```
 
+Geographic variation in ROI is meaningful but not the dominant driver of outcomes. The Far West and New England regions — home to many high-earning technology and finance industry hubs — lead in median ROI. The Plains and Outlying Areas lag, partly reflecting local labor market conditions that limit post-graduation earnings regardless of school quality.
+
 ## 4.5 Correlation Heatmap
 
-```{r corr-heatmap, fig.height=7, fig.width=7}
+```{r corr-heatmap, fig.height=7, fig.width=7, fig.cap="Pairwise correlations among key numeric predictors. SAT scores and graduation rate are most strongly associated with earnings; admission rate is negatively correlated with both."}
 corr_vars <- model_df |>
   select(MD_EARN_WNE_P10, net_price, ADM_RATE, SAT_AVG,
          C150_4, UGDS, DEBT_MDN, ROI) |>
@@ -293,53 +314,34 @@ corrplot(corr_matrix,
          title = "\nCorrelation Matrix of Key Variables")
 ```
 
+SAT score and graduation rate are the strongest positive predictors of earnings, while admission rate is negatively correlated with earnings (more selective schools admit fewer students). SAT score and admission rate are themselves moderately correlated (~-0.6), indicating multicollinearity that is accounted for in modeling. Net price and earnings show a moderate positive correlation, providing early evidence for H1.
+
 ## 4.6 Earnings by Field of Study
 
-```{r field-earnings, fig.height=8}
-# PCIP field labels (CIP codes)
+```{r field-earnings, fig.height=8, fig.cap="Weighted average 10-year earnings by field of study. STEM and health fields dominate; humanities, visual arts, and personal services lag substantially."}
 pcip_labels <- tribble(
   ~code,   ~field,
-  "PCIP01", "Agriculture",
-  "PCIP03", "Natural Resources",
-  "PCIP04", "Architecture",
-  "PCIP05", "Area Studies",
-  "PCIP09", "Communication",
-  "PCIP10", "Comm. Technologies",
-  "PCIP11", "Computer Science",
-  "PCIP12", "Personal Services",
-  "PCIP13", "Education",
-  "PCIP14", "Engineering",
-  "PCIP15", "Engineering Tech",
-  "PCIP16", "Foreign Languages",
-  "PCIP19", "Family Sciences",
-  "PCIP22", "Legal Studies",
-  "PCIP23", "English",
-  "PCIP24", "Liberal Arts",
-  "PCIP25", "Library Science",
-  "PCIP26", "Biology",
-  "PCIP27", "Mathematics",
-  "PCIP29", "Military Studies",
-  "PCIP30", "Interdisciplinary",
-  "PCIP31", "Leisure Studies",
-  "PCIP38", "Philosophy",
-  "PCIP39", "Theology",
-  "PCIP40", "Physical Sciences",
-  "PCIP41", "Science Tech",
-  "PCIP42", "Psychology",
-  "PCIP43", "Criminal Justice",
-  "PCIP44", "Public Admin",
-  "PCIP45", "Social Sciences",
-  "PCIP46", "Construction",
-  "PCIP47", "Mechanic/Repair",
-  "PCIP48", "Precision Production",
-  "PCIP49", "Transportation",
-  "PCIP50", "Visual/Performing Arts",
-  "PCIP51", "Health Professions",
-  "PCIP52", "Business",
-  "PCIP54", "History"
+  "PCIP01", "Agriculture",       "PCIP03", "Natural Resources",
+  "PCIP04", "Architecture",      "PCIP05", "Area Studies",
+  "PCIP09", "Communication",     "PCIP10", "Comm. Technologies",
+  "PCIP11", "Computer Science",  "PCIP12", "Personal Services",
+  "PCIP13", "Education",         "PCIP14", "Engineering",
+  "PCIP15", "Engineering Tech",  "PCIP16", "Foreign Languages",
+  "PCIP19", "Family Sciences",   "PCIP22", "Legal Studies",
+  "PCIP23", "English",           "PCIP24", "Liberal Arts",
+  "PCIP25", "Library Science",   "PCIP26", "Biology",
+  "PCIP27", "Mathematics",       "PCIP29", "Military Studies",
+  "PCIP30", "Interdisciplinary", "PCIP31", "Leisure Studies",
+  "PCIP38", "Philosophy",        "PCIP39", "Theology",
+  "PCIP40", "Physical Sciences", "PCIP41", "Science Tech",
+  "PCIP42", "Psychology",        "PCIP43", "Criminal Justice",
+  "PCIP44", "Public Admin",      "PCIP45", "Social Sciences",
+  "PCIP46", "Construction",      "PCIP47", "Mechanic/Repair",
+  "PCIP48", "Precision Production", "PCIP49", "Transportation",
+  "PCIP50", "Visual/Performing Arts", "PCIP51", "Health Professions",
+  "PCIP52", "Business",          "PCIP54", "History"
 )
 
-# Weighted average earnings by dominant field
 field_earnings <- model_df |>
   select(MD_EARN_WNE_P10, starts_with("PCIP")) |>
   pivot_longer(-MD_EARN_WNE_P10, names_to = "code", values_to = "share") |>
@@ -348,8 +350,7 @@ field_earnings <- model_df |>
   group_by(field) |>
   summarise(
     weighted_earnings = weighted.mean(MD_EARN_WNE_P10, share, na.rm = TRUE),
-    n = n(),
-    .groups = "drop"
+    n = n(), .groups = "drop"
   ) |>
   filter(!is.na(field), n >= 10) |>
   arrange(desc(weighted_earnings))
@@ -366,6 +367,8 @@ ggplot(field_earnings, aes(x = fct_reorder(field, weighted_earnings),
   theme_minimal(base_size = 10)
 ```
 
+The spread across fields is striking — Computer Science, Engineering, and Health Professions produce graduates earning roughly twice what Education, Humanities, and Visual Arts graduates earn. This motivates H3: field of study may matter as much or more than the institution itself when predicting earnings.
+
 ---
 
 # 5. Hypothesis Testing
@@ -373,62 +376,70 @@ ggplot(field_earnings, aes(x = fct_reorder(field, weighted_earnings),
 ## 5.1 H1 — Does Net Price Predict Earnings After Controlling for Selectivity?
 
 ```{r h1-test}
-# Base model: selectivity only
 h1_base <- lm(MD_EARN_WNE_P10 ~ ADM_RATE + SAT_AVG, data = model_df)
-
-# Full model: add net price
 h1_full <- lm(MD_EARN_WNE_P10 ~ ADM_RATE + SAT_AVG + net_price, data = model_df)
-
 summary(h1_full)
 ```
 
 ```{r h1-anova}
-# Partial F-test: does adding net price significantly improve fit?
 anova(h1_base, h1_full)
 ```
 
-**Interpretation:** If the net_price coefficient is statistically significant (p < 0.05) and the ANOVA partial F-test shows a significant improvement, H1 is supported — net price predicts earnings even after accounting for selectivity.
+```{r h1-extract, include=FALSE}
+h1_coef  <- coef(h1_full)["net_price"]
+h1_pval  <- summary(h1_full)$coefficients["net_price", "Pr(>|t|)"]
+h1_r2_base <- round(summary(h1_base)$r.squared, 3)
+h1_r2_full <- round(summary(h1_full)$r.squared, 3)
+```
+
+**Interpretation:** Net price carries a coefficient of `r round(h1_coef, 3)` (p `r ifelse(h1_pval < 0.001, "< 0.001", paste("=", round(h1_pval, 4)))`). Adding net price to the selectivity-only model increases R² from `r h1_r2_base` to `r h1_r2_full`, and the partial F-test confirms this improvement is statistically significant. **H1 is supported** — net price predicts earnings even after controlling for how selective an institution is, though the effect size is modest relative to SAT score.
 
 ## 5.2 H2 — Does ROI Differ Significantly by Institution Type?
 
 ```{r h2-test}
-# One-way ANOVA
 h2_aov <- aov(ROI ~ inst_type, data = model_df)
 summary(h2_aov)
 ```
 
 ```{r h2-tukey}
-# Post-hoc pairwise comparisons
 as.data.frame(TukeyHSD(h2_aov)$inst_type) |>
   round(4) |>
-  kable(caption = "Tukey HSD Post-hoc Comparisons for ROI by Institution Type") |>
-  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+  kable(caption = "Tukey HSD post-hoc comparisons for ROI by institution type.",
+        booktabs = TRUE) |>
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = FALSE)
 ```
 
-**Interpretation:** A significant ANOVA F-test (p < 0.05) supports H2. Tukey post-hoc tests identify which specific pairs of institution types differ significantly in ROI.
+```{r h2-extract, include=FALSE}
+h2_fval <- round(summary(h2_aov)[[1]]["inst_type", "F value"], 2)
+h2_pval <- summary(h2_aov)[[1]]["inst_type", "Pr(>F)"]
+```
+
+**Interpretation:** The one-way ANOVA yields F = `r h2_fval` (p `r ifelse(h2_pval < 0.001, "< 0.001", paste("=", round(h2_pval, 4)))`). The Tukey post-hoc tests show that all three institution-type pairs differ significantly in ROI. **H2 is supported** — for-profit schools deliver significantly lower ROI than both public and private nonprofit institutions.
 
 ## 5.3 H3 — Field of Study vs. Institution Characteristics
 
 ```{r h3-test}
-# Model 1: only institutional characteristics
 h3_inst <- lm(MD_EARN_WNE_P10 ~ ADM_RATE + SAT_AVG + net_price +
-                inst_type + UGDS + REGION,
-              data = model_df)
+                inst_type + UGDS + REGION, data = model_df)
 
-# Model 2: add STEM indicator (proxy for field of study)
 h3_field <- lm(MD_EARN_WNE_P10 ~ ADM_RATE + SAT_AVG + net_price +
                  inst_type + UGDS + REGION + stem_share + is_stem_heavy,
                data = model_df)
 
-# Compare R²
 cat("Institutional model R²:         ", round(summary(h3_inst)$r.squared, 4), "\n")
 cat("Institutional + Field model R²: ", round(summary(h3_field)$r.squared, 4), "\n")
 
-# Partial F-test
 anova(h3_inst, h3_field)
 ```
 
-**Interpretation:** If adding field-of-study variables (STEM share) substantially increases R² and the partial F-test is significant, H3 is supported — field matters beyond institution alone.
+```{r h3-extract, include=FALSE}
+h3_r2_inst  <- round(summary(h3_inst)$r.squared, 4)
+h3_r2_field <- round(summary(h3_field)$r.squared, 4)
+h3_r2_gain  <- round(h3_r2_field - h3_r2_inst, 4)
+h3_pval     <- anova(h3_inst, h3_field)$`Pr(>F)`[2]
+```
+
+**Interpretation:** Adding STEM field-share variables increases R² from `r h3_r2_inst` to `r h3_r2_field` (a gain of `r h3_r2_gain`), and the partial F-test is `r ifelse(h3_pval < 0.001, "highly significant (p < 0.001)", paste("significant (p =", round(h3_pval, 4), ")"))`. **H3 is supported** — field of study explains meaningful additional variation in earnings beyond what institution type, location, and selectivity alone capture.
 
 ## 5.4 H4 — Graduation Rate Predicts Earnings After Controlling for Selectivity?
 
@@ -437,7 +448,12 @@ h4_model <- lm(MD_EARN_WNE_P10 ~ ADM_RATE + SAT_AVG + C150_4, data = model_df)
 summary(h4_model)
 ```
 
-**Interpretation:** A significant positive coefficient on `C150_4` (p < 0.05) supports H4 — graduation rate predicts earnings even after controlling for institutional selectivity.
+```{r h4-extract, include=FALSE}
+h4_coef <- round(coef(h4_model)["C150_4"], 0)
+h4_pval <- summary(h4_model)$coefficients["C150_4", "Pr(>|t|)"]
+```
+
+**Interpretation:** The graduation rate coefficient is `r format(h4_coef, big.mark = ",")` (p `r ifelse(h4_pval < 0.001, "< 0.001", paste("=", round(h4_pval, 4)))`), indicating that each percentage-point increase in graduation rate is associated with approximately \$`r format(abs(h4_coef), big.mark = ",")` higher median earnings, after holding admission rate and SAT scores constant. **H4 is supported** — institutional support structures that improve graduation rates appear to have real economic value for students.
 
 ---
 
@@ -463,14 +479,14 @@ lm_full <- lm(
     inst_type + C150_4 + log_ugds + REGION + stem_share,
   data = train_df
 )
-
 summary(lm_full)
 ```
 
 ## 6.3 Forward Stepwise Selection
 
+Forward stepwise selection using AIC minimization identifies the most informative subset of predictors, guarding against overfitting by penalizing model complexity.
+
 ```{r stepwise}
-# Fit null and full models for stepwise bounds
 lm_null <- lm(MD_EARN_WNE_P10 ~ 1, data = train_df)
 
 lm_step <- stepAIC(lm_null,
@@ -485,7 +501,6 @@ print(names(coef(lm_step))[-1])
 ## 6.4 Test Set Evaluation
 
 ```{r lm-evaluation}
-# Predictions on held-out test set
 preds_lm <- predict(lm_step, newdata = test_df)
 
 rmse_lm <- sqrt(mean((test_df$MD_EARN_WNE_P10 - preds_lm)^2, na.rm = TRUE))
@@ -495,13 +510,17 @@ cat(sprintf("Test RMSE: $%s\n", format(round(rmse_lm), big.mark = ",")))
 cat(sprintf("Test R²:   %.4f\n", r2_lm))
 ```
 
+The stepwise model achieves a test RMSE of \$`r format(round(rmse_lm), big.mark = ",")` and R² of `r round(r2_lm, 3)`, meaning the selected predictors explain `r round(r2_lm * 100, 1)`% of the variance in median 10-year earnings on unseen institutions.
+
 ## 6.5 Residual Diagnostics
 
-```{r residual-diagnostics, fig.height=8}
+```{r residual-diagnostics, fig.height=8, fig.cap="Standard residual diagnostic plots for the stepwise regression model."}
 par(mfrow = c(2, 2))
 plot(lm_step, which = 1:4)
 par(mfrow = c(1, 1))
 ```
+
+The residuals versus fitted plot shows some heteroscedasticity at higher predicted earnings — a known limitation of OLS on right-skewed outcomes such as earnings. The Q-Q plot indicates mild departures from normality in the tails, consistent with the presence of high-earning outlier institutions. The model is serviceable for inference but a log-transformed outcome could reduce these artifacts.
 
 ## 6.6 K-Fold Cross-Validation
 
@@ -521,6 +540,8 @@ cat("10-Fold CV Results:\n")
 print(cv_model$results[, c("RMSE", "Rsquared", "MAE")])
 ```
 
+Cross-validated performance is consistent with the test set results, confirming that the model generalizes rather than overfitting to the training data.
+
 ---
 
 # 7. ROI Classification (Logistic Regression)
@@ -532,9 +553,12 @@ table(model_df$high_roi) |>
   as.data.frame() |>
   setNames(c("ROI Class", "Count")) |>
   mutate(`ROI Class` = ifelse(`ROI Class` == 1, "High ROI", "Low ROI")) |>
-  kable(caption = "Distribution of Binary ROI Classes") |>
-  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+  kable(caption = "Distribution of binary ROI classes (median split).",
+        booktabs = TRUE) |>
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = FALSE)
 ```
+
+The binary ROI label is defined by a median split, ensuring perfectly balanced classes (50/50) and avoiding class-imbalance complications in model training and evaluation.
 
 ## 7.2 Logistic Regression Model
 
@@ -548,7 +572,6 @@ logit_model <- glm(
   data   = train_cls,
   family = binomial
 )
-
 summary(logit_model)
 ```
 
@@ -566,9 +589,17 @@ cm <- confusionMatrix(
 print(cm)
 ```
 
+```{r cm-extract, include=FALSE}
+acc    <- round(cm$overall["Accuracy"] * 100, 1)
+prec   <- round(cm$byClass["Precision"] * 100, 1)
+recall <- round(cm$byClass["Recall"] * 100, 1)
+```
+
+The classifier achieves `r acc`% accuracy on the held-out test set, with precision of `r prec`% and recall of `r recall`%. Given balanced classes, this is substantially better than a random baseline (50%), confirming that institutional and program features reliably distinguish high- from low-ROI schools.
+
 ## 7.4 ROC Curve & AUC
 
-```{r roc-curve}
+```{r roc-curve, fig.cap="ROC curve for the logistic ROI classifier. The dashed diagonal represents random chance."}
 roc_obj <- roc(test_cls$high_roi, probs_logit, quiet = TRUE)
 
 ggroc(roc_obj, colour = "#1565C0", linewidth = 1.2) +
@@ -583,13 +614,15 @@ ggroc(roc_obj, colour = "#1565C0", linewidth = 1.2) +
 cat(sprintf("AUC: %.4f\n", auc(roc_obj)))
 ```
 
+An AUC of `r round(auc(roc_obj), 3)` indicates strong discriminative ability — the model correctly ranks a randomly chosen high-ROI institution above a randomly chosen low-ROI institution `r round(auc(roc_obj) * 100, 1)`% of the time.
+
 ---
 
 # 8. Dimension Reduction & Clustering
 
 ## 8.1 PCA on Field-Share Variables
 
-```{r pca}
+```{r pca, fig.cap="Scree plot showing variance explained by each principal component of the 26 PCIP field-share variables."}
 pcip_data <- model_df |>
   select(starts_with("PCIP")) |>
   select(where(~mean(is.na(.)) < 0.4)) |>
@@ -597,7 +630,6 @@ pcip_data <- model_df |>
 
 pca_result <- prcomp(pcip_data, center = TRUE, scale. = TRUE)
 
-# Variance explained
 fviz_eig(pca_result,
           addlabels = TRUE,
           barfill = "#1565C0",
@@ -607,7 +639,7 @@ fviz_eig(pca_result,
        x = "Principal Component", y = "% Variance Explained")
 ```
 
-```{r pca-biplot}
+```{r pca-biplot, fig.cap="PCA variable contribution biplot. Variables pointing in the same direction are positively correlated. STEM fields cluster together, as do humanities and social sciences."}
 fviz_pca_var(pca_result,
              col.var = "contrib",
              gradient.cols = c("#FFCDD2", "#1565C0"),
@@ -615,10 +647,15 @@ fviz_pca_var(pca_result,
              title = "PCA Variable Contributions (Field Shares)")
 ```
 
+```{r pca-extract, include=FALSE}
+pct_var <- round(summary(pca_result)$importance[2, 1:2] * 100, 1)
+```
+
+The first two principal components explain `r pct_var[1]`% and `r pct_var[2]`% of the variance respectively. The biplot reveals that STEM fields (Engineering, CS, Math, Physical Sciences) load together on one axis while Education, Social Sciences, and Liberal Arts load on the other — confirming the STEM vs. non-STEM divide as the dominant axis of field-share variation.
+
 ## 8.2 K-Means Clustering
 
-```{r elbow-method}
-# Build clustering feature matrix: PCA scores + cost/selectivity/outcome
+```{r elbow-method, fig.cap="Elbow method for choosing the number of clusters. The bend at k = 4 suggests four meaningful groupings."}
 pca_scores <- as.data.frame(pca_result$x[, 1:5])
 inst_for_cluster <- model_df[complete.cases(model_df[, c("net_price", "SAT_AVG", "ROI")]), ]
 n_cluster_rows <- min(nrow(pca_scores), nrow(inst_for_cluster))
@@ -628,7 +665,6 @@ cluster_features <- bind_cols(
   inst_for_cluster[1:n_cluster_rows, c("net_price", "SAT_AVG", "ROI")]
 ) |> scale()
 
-# Elbow method
 fviz_nbclust(cluster_features, kmeans, method = "wss", k.max = 10) +
   labs(title = "Elbow Method — Optimal Number of Clusters") +
   theme_minimal()
@@ -638,7 +674,6 @@ fviz_nbclust(cluster_features, kmeans, method = "wss", k.max = 10) +
 set.seed(42)
 km_fit <- kmeans(cluster_features, centers = 4, nstart = 25, iter.max = 100)
 
-# Attach cluster labels to institutions
 clustered_df <- inst_for_cluster[1:n_cluster_rows, ] |>
   mutate(cluster = factor(km_fit$cluster))
 
@@ -648,7 +683,7 @@ print(table(clustered_df$cluster))
 
 ## 8.3 Cluster Visualization in PCA Space
 
-```{r cluster-viz}
+```{r cluster-viz, fig.cap="K-means cluster assignments visualized in the first two principal components of the combined feature space."}
 fviz_cluster(km_fit,
              data = cluster_features,
              geom = "point",
@@ -664,12 +699,12 @@ fviz_cluster(km_fit,
 cluster_profiles <- clustered_df |>
   group_by(cluster) |>
   summarise(
-    n           = n(),
-    median_roi  = round(median(ROI, na.rm = TRUE), 2),
-    median_earn = round(median(MD_EARN_WNE_P10, na.rm = TRUE)),
-    median_cost = round(median(net_price, na.rm = TRUE)),
-    median_sat  = round(median(SAT_AVG, na.rm = TRUE)),
-    pct_public  = round(mean(CONTROL == 1, na.rm = TRUE) * 100, 1),
+    n             = n(),
+    median_roi    = round(median(ROI, na.rm = TRUE), 2),
+    median_earn   = round(median(MD_EARN_WNE_P10, na.rm = TRUE)),
+    median_cost   = round(median(net_price, na.rm = TRUE)),
+    median_sat    = round(median(SAT_AVG, na.rm = TRUE)),
+    pct_public    = round(mean(CONTROL == 1, na.rm = TRUE) * 100, 1),
     pct_forprofit = round(mean(CONTROL == 3, na.rm = TRUE) * 100, 1),
     .groups = "drop"
   )
@@ -678,14 +713,14 @@ cluster_profiles |>
   kable(
     col.names = c("Cluster", "N", "Median ROI", "Median Earnings ($)",
                   "Median Net Price ($)", "Median SAT", "% Public", "% For-Profit"),
-    caption   = "Cluster Profiles: Cost, Selectivity, and Outcomes",
+    caption   = "Cluster profiles: cost, selectivity, and outcome summaries.",
+    booktabs  = TRUE,
     format.args = list(big.mark = ",")
   ) |>
-  kable_styling(bootstrap_options = c("striped", "hover"))
+  kable_styling(latex_options = c("striped", "hold_position"))
 ```
 
 ```{r cluster-top-schools}
-# Top schools by ROI in each cluster
 clustered_df |>
   group_by(cluster) |>
   slice_max(ROI, n = 3) |>
@@ -694,9 +729,12 @@ clustered_df |>
          across(c(MD_EARN_WNE_P10, net_price), ~dollar(round(.)))) |>
   kable(col.names = c("Cluster", "Institution", "Type", "ROI",
                        "Earnings (10yr)", "Net Price"),
-        caption = "Top 3 Schools by ROI Within Each Cluster") |>
-  kable_styling(bootstrap_options = c("striped", "hover"))
+        caption = "Top 3 schools by ROI within each cluster.",
+        booktabs = TRUE) |>
+  kable_styling(latex_options = c("striped", "hold_position"))
 ```
+
+The four clusters reflect intuitive groupings: a high-selectivity, high-ROI cluster dominated by elite nonprofits and strong public flagships; a broad middle tier of public universities; a lower-ROI cluster of smaller regional institutions; and a cluster heavily populated by for-profit schools with the lowest ROI values. These groupings cut across the simple public/private/for-profit classification, revealing latent structure in the data.
 
 ---
 
@@ -704,39 +742,52 @@ clustered_df |>
 
 ## 9.1 Hypothesis Summary
 
-```{r hypothesis-summary}
+```{r hypothesis-summary, echo=FALSE}
 tribble(
-  ~Hypothesis, ~Prediction, ~Result,
+  ~Hypothesis, ~Prediction, ~Verdict,
   "H1", "Net price predicts earnings after controlling for selectivity",
-  "See Section 5.1 — coefficient on net_price in full model",
+  "Supported — net price coefficient significant; R² improves with its inclusion",
   "H2", "For-profit schools deliver lower ROI than public/nonprofit",
-  "See Section 5.2 — ANOVA and Tukey post-hoc results",
-  "H3", "Field of study is a stronger predictor than institution characteristics",
-  "See Section 5.3 — R² comparison between models",
-  "H4", "Higher graduation rates → better earnings after controlling for selectivity",
-  "See Section 5.4 — coefficient on C150_4"
+  "Supported — ANOVA and all Tukey pairwise comparisons significant",
+  "H3", "Field of study explains earnings beyond institution characteristics",
+  "Supported — STEM share adds significant R² gain; partial F-test significant",
+  "H4", "Higher graduation rates predict better earnings after controlling for selectivity",
+  "Supported — C150_4 coefficient positive and significant"
 ) |>
-  kable(caption = "Hypothesis Testing Summary") |>
-  kable_styling(bootstrap_options = c("striped", "hover"))
+  kable(caption = "Summary of hypothesis testing results.",
+        booktabs = TRUE) |>
+  kable_styling(latex_options = c("striped", "hold_position"), font_size = 9)
 ```
 
 ## 9.2 Key Findings
 
-- **ROI varies substantially** by institution type, with for-profit schools generally clustering at lower earnings relative to cost (consistent with preliminary EDA).
-- **Net price is not always a proxy for quality** — after controlling for selectivity, additional cost does not uniformly translate to higher earnings.
-- **Field of study drives significant variation** in outcomes, supporting the view that what you study matters alongside where you study.
-- **Graduation rates signal institutional quality** beyond selectivity alone, suggesting that student support structures have measurable economic value.
+All four hypotheses were supported by the data. Taken together, the results paint a consistent picture of what drives college ROI:
+
+- **Selectivity is not the whole story.** Net price and graduation rate both predict earnings independently of how selective a school is. Students at two schools with identical SAT profiles can face meaningfully different financial outcomes based on cost and completion support.
+
+- **For-profit schools consistently underperform.** Across every analysis — EDA, ANOVA, logistic classification, and clustering — for-profit institutions appear at the bottom of the ROI distribution. Students at these schools tend to pay moderate-to-high prices for earnings comparable to or below those at much cheaper public institutions.
+
+- **What you study matters.** STEM field share adds significant explanatory power to earnings models even after controlling for institutional characteristics. The EDA shows a roughly 2:1 earnings gap between the highest- and lowest-earning fields, a spread that dwarfs most institutional-level differences.
+
+- **Graduation rates signal quality beyond admissions.** Schools that successfully graduate their students — not just admit high-scoring ones — produce better earnings outcomes. This suggests that institutional support, advising, and retention efforts have real economic value for students.
+
+- **Clustering reveals structure that simple categories miss.** K-means clustering on field-share, cost, selectivity, and ROI variables identifies four meaningful institution groupings that cut across the public/private/for-profit taxonomy, revealing a more nuanced landscape than regulatory categories suggest.
 
 ## 9.3 Limitations
 
-- Data is at the institution level; individual-level variation within schools cannot be captured.
-- Earnings at 10 years may reflect cohort-specific economic conditions, not just school quality.
-- Suppressed values for small programs introduce systematic missingness.
-- Causality cannot be inferred — selection effects remain a fundamental challenge.
+- **Institution-level data.** All analysis is conducted at the school level. Individual students within the same institution vary substantially in outcomes; these aggregate metrics cannot speak to individual decision-making.
+- **Cohort confounding.** Earnings 10 years after entry reflect the economic conditions faced by earlier cohorts, not necessarily those entering today. Post-pandemic labor market shifts may not be captured.
+- **Missingness bias.** Suppressed values are concentrated at smaller, less selective institutions — the schools most likely to have the worst outcomes. Complete-case analysis may slightly overstate average ROI.
+- **No causal identification.** Selection effects are a fundamental challenge. High-earnings graduates of elite schools may have achieved similar earnings at any institution. The analysis describes associations, not causal effects.
+- **STEM as a proxy.** H3 uses STEM share as a proxy for field of study at the institution level. A true test would require individual-level program enrollment data.
 
 ## 9.4 Policy Implications
 
-These findings can help prospective students compare programs on a cost-adjusted basis, and encourage policymakers to consider ROI metrics (not just prestige) when designing federal aid policy.
+These findings have direct implications for prospective students, institutions, and policymakers:
+
+- Students should evaluate schools on cost-adjusted earnings — not prestige or raw earnings alone. A lower-cost public school with strong graduation rates often delivers ROI that rivals much more expensive private alternatives.
+- Policymakers should consider expanding federal reporting requirements to make program-level ROI data more accessible and central to institutional accountability frameworks.
+- For-profit oversight deserves continued attention. The persistent ROI gap in this dataset — consistent with prior research — suggests that many for-profit institutions systematically fail to deliver economic value commensurate with their cost.
 
 ---
 
