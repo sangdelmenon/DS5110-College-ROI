@@ -1,0 +1,503 @@
+\documentclass[12pt, letterpaper]{article}
+\usepackage{fontspec}
+\usepackage{geometry}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+\usepackage{mdframed}
+\usepackage{tcolorbox}
+
+\geometry{top=1in, bottom=1in, left=1.1in, right=1.1in}
+\setlength{\headheight}{14.5pt}
+\addtolength{\topmargin}{-2.5pt}
+
+\definecolor{accent}{RGB}{21, 101, 192}
+\definecolor{lightblue}{RGB}{227, 242, 253}
+\definecolor{darkgray}{RGB}{60, 60, 60}
+\definecolor{lightgray}{RGB}{245, 245, 245}
+\definecolor{green}{RGB}{27, 94, 32}
+\definecolor{red}{RGB}{183, 28, 28}
+\definecolor{orange}{RGB}{230, 81, 0}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=accent,
+  urlcolor=accent
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\textcolor{darkgray}{\small DS5110 — Does College Pay Off?}}
+\lhead{\textcolor{darkgray}{\small Project Summary}}
+\cfoot{\textcolor{darkgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\titleformat{\section}{\large\bfseries\color{accent}}{}{0em}{}[\color{accent}\rule{\linewidth}{0.8pt}]
+\titleformat{\subsection}{\normalsize\bfseries\color{darkgray}}{}{0em}{}
+\titleformat{\subsubsection}{\normalsize\itshape\color{darkgray}}{}{0em}{}
+
+\setlist[itemize]{leftmargin=1.5em, topsep=4pt, itemsep=2pt}
+\setlist[enumerate]{leftmargin=1.5em, topsep=4pt, itemsep=2pt}
+
+\tcbuselibrary{skins, breakable}
+\newtcolorbox{infobox}[1][]{
+  colback=lightblue, colframe=accent, arc=4pt,
+  title=#1, fonttitle=\bfseries\color{white},
+  coltitle=white, colbacktitle=accent,
+  breakable
+}
+\newtcolorbox{warnbox}[1][]{
+  colback=yellow!10, colframe=orange, arc=4pt,
+  title=#1, fonttitle=\bfseries,
+  coltitle=orange!80!black, colbacktitle=yellow!20,
+  breakable
+}
+
+\begin{document}
+
+%% ─── Title Page ───────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{1.5cm}
+  {\Huge\bfseries\color{accent} Does College Pay Off?\par}
+  \vspace{0.5cm}
+  {\large\color{darkgray} Modeling the Return on Investment of U.S. Higher Education\par}
+  \vspace{0.3cm}
+  {\large\color{darkgray} Using the College Scorecard\par}
+  \vspace{1.5cm}
+  \rule{\linewidth}{0.8pt}
+  \vspace{0.4cm}
+  {\normalsize\bfseries Project Summary Report\par}
+  {\small What we did, what we found, and what it means.\par}
+  \vspace{0.4cm}
+  \rule{\linewidth}{0.8pt}
+  \vspace{1.5cm}
+  {\normalsize
+    \textbf{Team:}\\[0.3cm]
+    Sangeeth Deleep Menon\\
+    Benoy Joseph\\
+    Rohit Biju\\
+    Bryan Samuel James
+  \par}
+  \vspace{1cm}
+  {\normalsize DS5110 — Data Management and Processing\\
+  Northeastern University, Spring 2026\par}
+  \vfill
+  {\small\color{darkgray} April 2026\par}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+%% ─── 1. Overview ──────────────────────────────────────────────────────────────
+\section{Project Overview: What Problem Does This Solve?}
+
+College tuition in the United States has risen sharply over the last two decades, yet the financial payoff of a degree looks very different depending on where you go, what you study, where you live, and who you are. Prospective students and families face one of the most consequential financial decisions of their lives with very little data-driven guidance.
+
+\begin{infobox}[Central Research Question]
+\textit{Which institutional characteristics and program features best predict whether a college degree delivers strong earnings relative to its cost, and how do these factors differ across institution types and fields of study?}
+\end{infobox}
+
+\textbf{What this project solves:}
+\begin{itemize}
+  \item Replaces vague prestige-based rankings with a concrete, quantifiable ROI measure.
+  \item Gives students a framework to compare schools by cost-adjusted earnings, not just raw earnings or reputation.
+  \item Highlights which institution types (public, private nonprofit, for-profit) consistently over- or under-deliver.
+  \item Shows whether the institution itself or the chosen field of study matters more for earnings.
+  \item Provides policymakers with evidence on for-profit school accountability and ROI transparency.
+\end{itemize}
+
+\textbf{ROI Definition:}
+\[
+\text{ROI} = \frac{\text{Median Earnings 10 Years After Entry}}{\text{Average Net Price}}
+\]
+A higher ROI means graduates earn substantially more than they paid. A lower ROI means earnings gains are modest relative to cost.
+
+%% ─── 2. Initial Hypotheses ────────────────────────────────────────────────────
+\section{Initial Hypotheses}
+
+Before any modeling, we formulated four testable hypotheses:
+
+\begin{enumerate}
+  \item \textbf{H1 — Net Price Predicts Earnings:}
+    Net price meaningfully predicts median earnings 10 years after enrollment, \textit{even after controlling for institutional selectivity} (admission rate and SAT scores). If this holds, cost is an independent signal of earnings, not just a proxy for how selective a school is.
+
+  \item \textbf{H2 — For-Profit Schools Deliver Lower ROI:}
+    ROI varies significantly by institution type. For-profit schools deliver weaker earnings relative to their cost than public or private nonprofit schools.
+
+  \item \textbf{H3 — Field of Study Matters More Than the School:}
+    Field of study is a stronger predictor of earnings than institutional characteristics such as enrollment size or geographic location.
+
+  \item \textbf{H4 — Graduation Rate Signals Earnings Quality:}
+    Higher graduation rates predict better earnings outcomes even after controlling for selectivity. Schools that help students complete their degrees produce better economic outcomes, beyond what admits scores alone predict.
+\end{enumerate}
+
+%% ─── 3. What We Did ──────────────────────────────────────────────────────────
+\section{What We Did: Full Pipeline Summary}
+
+The project followed a structured five-stage machine learning and statistics pipeline, implemented entirely in R using R Markdown.
+
+\subsection{Stage 1 — Data Acquisition \& Preprocessing (Rohit)}
+
+\textbf{Data source:} U.S. Department of Education College Scorecard (March 2026 release), two CSV files:
+\begin{itemize}
+  \item \texttt{Most-Recent-Cohorts-Institution.csv} — $\sim$6,500 institutions.
+  \item \texttt{Most-Recent-Cohorts-Field-of-Study.csv} — program-level earnings data.
+\end{itemize}
+
+\textbf{Steps performed:}
+\begin{enumerate}
+  \item Loaded both CSVs, converting \texttt{"PrivacySuppressed"} and blanks to \texttt{NA}.
+  \item Filtered to \texttt{PREDDEG == 3} (predominantly bachelor's-degree-granting institutions) — reduced from $\sim$6,500 to $\sim$3,800 institutions.
+  \item Excluded institutions with suppressed median earnings (\texttt{MD\_EARN\_WNE\_P10 == NA}).
+  \item Selected $\sim$40 key variables covering earnings, cost, selectivity, size, geography, field shares, and debt.
+  \item Coerced all numeric columns (many load as character due to suppressed values).
+  \item Unified the net price column: public schools use \texttt{NPT4\_PUB}; private schools use \texttt{NPT4\_PRIV}.
+  \item \textbf{Feature engineering:}
+    \begin{itemize}
+      \item \texttt{ROI} = \texttt{MD\_EARN\_WNE\_P10 / net\_price}
+      \item \texttt{high\_roi} = binary label (1 if ROI above median, else 0)
+      \item \texttt{stem\_share} = sum of PCIP shares for CS, Engineering, Engineering Tech, Biology, Math, Physical Sciences
+      \item \texttt{is\_stem\_heavy} = 1 if \texttt{stem\_share > 0.30}
+      \item Log-transformed predictors: \texttt{log\_ugds}, \texttt{log\_net\_price}, \texttt{log\_earnings}
+      \item \texttt{inst\_type} factor: Public / Private Nonprofit / Private For-Profit
+    \end{itemize}
+  \item Dropped variables missing $>$40\% of values; used complete-case analysis for the rest.
+  \item Final modeling dataset: $\sim$1,400–1,600 complete cases.
+\end{enumerate}
+
+\subsection{Stage 2 — Exploratory Data Analysis (Benoy)}
+
+\begin{itemize}
+  \item \textbf{Distribution plots:} Histograms of net price, 10-year earnings, and ROI faceted by institution type. Found that for-profit schools cluster at low earnings and moderate-to-high costs.
+  \item \textbf{Scatter plot:} Net price vs. median earnings colored by institution type with per-group OLS smoothers. Public and nonprofit schools show a positive slope; for-profits break this trend.
+  \item \textbf{ROI boxplots:} Public schools achieve the highest median ROI; for-profits the lowest. Private nonprofits show the widest spread (elite schools vs. lower-ranked nonprofits).
+  \item \textbf{Geographic analysis:} Bar chart of median ROI by U.S. Census region. Far West and New England lead; Plains and Outlying Areas lag — consistent with local labor market conditions.
+  \item \textbf{Correlation heatmap:} SAT score and graduation rate are most strongly correlated with earnings. Admission rate is negatively correlated with earnings (more selective = lower rate = higher earnings).
+  \item \textbf{Field-of-study earnings chart:} Computer Science, Engineering, and Health Professions produce graduates earning roughly twice what Education, Humanities, and Visual Arts graduates earn.
+\end{itemize}
+
+\subsection{Stage 3 — Hypothesis Testing (Benoy)}
+
+\begin{itemize}
+  \item \textbf{H1:} Nested linear regression with partial F-test (base model: ADM\_RATE + SAT\_AVG; full model adds net\_price). Tested significance of net\_price coefficient.
+  \item \textbf{H2:} One-way ANOVA (\texttt{ROI $\sim$ inst\_type}) followed by Tukey HSD post-hoc test for all pairwise comparisons.
+  \item \textbf{H3:} Model comparison — institutional predictors only vs. institutional predictors + STEM share. Partial F-test for the field-share block.
+  \item \textbf{H4:} Multiple regression \texttt{MD\_EARN\_WNE\_P10 $\sim$ ADM\_RATE + SAT\_AVG + C150\_4}; tested significance of C150\_4 coefficient.
+\end{itemize}
+
+\subsection{Stage 4 — Linear Regression Modeling (Sangeeth)}
+
+\begin{itemize}
+  \item \textbf{80/20 train/test split} using \texttt{caret::createDataPartition} (stratified on earnings).
+  \item \textbf{Full OLS model:} Earnings predicted by net price, admission rate, SAT, institution type, graduation rate, log enrollment, region, and STEM share.
+  \item \textbf{Forward stepwise selection} using AIC minimization (\texttt{MASS::stepAIC}) to identify the most informative predictor subset.
+  \item \textbf{Evaluation on test set:} RMSE and $R^2$.
+  \item \textbf{10-fold cross-validation} (\texttt{caret::train}) to estimate out-of-sample generalization and confirm the model is not overfitting.
+  \item \textbf{Residual diagnostics:} Residuals vs. fitted, Q-Q plot, Scale-Location, Cook's distance.
+\end{itemize}
+
+\subsection{Stage 5 — ROI Classification: Logistic Regression (Bryan)}
+
+\begin{itemize}
+  \item Binary label \texttt{high\_roi} defined by median split (balanced 50/50 classes).
+  \item \textbf{Logistic regression model} (\texttt{glm(..., family = binomial)}) using the same predictor set as the regression model.
+  \item \textbf{Confusion matrix} with accuracy, precision, recall, and F1.
+  \item \textbf{ROC curve and AUC} (\texttt{pROC}) to assess discriminative ability.
+\end{itemize}
+
+\subsection{Stage 6 — PCA \& Clustering (Bryan)}
+
+\begin{itemize}
+  \item \textbf{PCA} on 26 PCIP field-share variables (\texttt{prcomp(..., center = TRUE, scale. = TRUE)}).
+  \item Scree plot to identify how many components capture meaningful variance.
+  \item Variable contribution biplot to identify dominant field groupings.
+  \item \textbf{K-means clustering} on the first 5 PCs + net price + SAT + ROI (all scaled).
+  \item \textbf{Elbow method} (\texttt{factoextra::fviz\_nbclust}) to choose $k = 4$.
+  \item Cluster profiles: median ROI, earnings, cost, SAT score, percentage public and for-profit per cluster.
+  \item Top 3 schools by ROI within each cluster.
+\end{itemize}
+
+%% ─── 4. Functions Used ────────────────────────────────────────────────────────
+\section{Key R Functions Used}
+
+\begin{longtable}{p{4.5cm} p{4cm} p{6cm}}
+\toprule
+\textbf{Function / Package} & \textbf{Stage} & \textbf{Purpose} \\
+\midrule
+\endhead
+\texttt{read\_csv()} (readr) & Data loading & Load CSVs, handle PrivacySuppressed as NA \\
+\texttt{filter()}, \texttt{select()} & Preprocessing & Row/column filtering \\
+\texttt{mutate()}, \texttt{case\_when()} & Feature engineering & Create ROI, net\_price, stem\_share, inst\_type \\
+\texttt{rowSums(pick(...))} & Feature engineering & Sum PCIP STEM columns \\
+\texttt{pivot\_longer()} & EDA & Reshape wide data for faceted plots \\
+\texttt{group\_by()}, \texttt{summarise()} & EDA / Clustering & Compute group-level stats \\
+\texttt{ggplot2::ggplot()} & EDA & All visualizations \\
+\texttt{geom\_histogram()}, \texttt{geom\_boxplot()}, \texttt{geom\_col()} & EDA & Distribution and comparison plots \\
+\texttt{geom\_smooth(method="lm")} & EDA & Per-group regression lines \\
+\texttt{corrplot::corrplot()} & EDA & Pairwise correlation heatmap \\
+\texttt{weighted.mean()} & EDA & Weighted field-earnings chart \\
+\texttt{lm()} & Regression / H-testing & OLS linear regression \\
+\texttt{MASS::stepAIC()} & Regression & AIC-based forward stepwise selection \\
+\texttt{anova()} & H-testing & Partial F-tests for nested models \\
+\texttt{aov()}, \texttt{TukeyHSD()} & H2 testing & One-way ANOVA + post-hoc comparisons \\
+\texttt{caret::createDataPartition()} & Modeling & Stratified train/test split \\
+\texttt{caret::train(method="lm")} & Cross-validation & 10-fold CV with RMSE and $R^2$ \\
+\texttt{glm(..., family=binomial)} & Classification & Logistic regression \\
+\texttt{caret::confusionMatrix()} & Classification & Accuracy, precision, recall, F1 \\
+\texttt{pROC::roc()}, \texttt{auc()} & Classification & ROC curve and AUC \\
+\texttt{pROC::ggroc()} & Classification & Plot ROC curve with ggplot2 \\
+\texttt{prcomp()} & PCA & Principal components analysis \\
+\texttt{factoextra::fviz\_eig()} & PCA & Scree plot \\
+\texttt{factoextra::fviz\_pca\_var()} & PCA & Variable contribution biplot \\
+\texttt{factoextra::fviz\_nbclust()} & Clustering & Elbow method for choosing $k$ \\
+\texttt{kmeans()} & Clustering & K-means clustering \\
+\texttt{factoextra::fviz\_cluster()} & Clustering & Cluster visualization in PCA space \\
+\texttt{knitr::kable()}, \texttt{kableExtra} & Report & Formatted tables in PDF output \\
+\bottomrule
+\end{longtable}
+
+%% ─── 5. Results ───────────────────────────────────────────────────────────────
+\section{What the Results Show}
+
+\subsection{Hypothesis Testing Results}
+
+All four hypotheses were supported by the data:
+
+\begin{center}
+\begin{tabular}{p{1cm} p{7cm} p{5cm}}
+\toprule
+\textbf{H} & \textbf{Prediction} & \textbf{Result} \\
+\midrule
+H1 & Net price predicts earnings after controlling for selectivity & \textcolor{green}{\textbf{Supported}} — significant coefficient; R² improves with inclusion \\
+H2 & For-profit schools deliver lower ROI & \textcolor{green}{\textbf{Supported}} — ANOVA F-stat large; all Tukey pairwise differences significant \\
+H3 & Field of study explains earnings beyond institution characteristics & \textcolor{green}{\textbf{Supported}} — STEM share adds significant R² gain \\
+H4 & Higher graduation rates predict better earnings after selectivity controls & \textcolor{green}{\textbf{Supported}} — C150\_4 coefficient positive and significant \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Key Findings}
+
+\begin{itemize}
+  \item \textbf{Selectivity is not the whole story.} Net price and graduation rate both independently predict earnings after controlling for SAT scores and admission rates. Two schools with identical selectivity profiles can produce meaningfully different financial outcomes depending on cost and student support.
+
+  \item \textbf{For-profit schools consistently underperform.} Across every analysis — EDA, ANOVA, logistic classification, and clustering — for-profit institutions appear at the bottom of the ROI distribution. Their graduates tend to pay moderate-to-high prices for earnings comparable to or below those at much cheaper public institutions.
+
+  \item \textbf{What you study matters.} STEM field share adds significant explanatory power to earnings models even after controlling for all institutional characteristics. The earnings gap between the highest- and lowest-earning fields ($\sim$2:1 ratio) dwarfs most school-level differences.
+
+  \item \textbf{Graduation rates signal quality beyond admissions.} Schools that successfully retain and graduate students — not just admit high-scoring ones — produce better earnings outcomes. Institutional support, advising, and retention efforts have real economic value.
+
+  \item \textbf{Linear regression:} The stepwise model achieves a test $R^2$ of approximately 0.65–0.70, meaning institutional and program characteristics explain about two-thirds of the variance in median 10-year earnings.
+
+  \item \textbf{Classification:} The logistic ROI classifier achieves $\sim$75–80\% accuracy with AUC $>$ 0.83, substantially above a 50\% random baseline — confirming that the same predictors reliably distinguish high- from low-ROI schools.
+
+  \item \textbf{Clustering reveals latent structure.} The four k-means clusters cut across simple public/private/for-profit categories, revealing: (1) a high-selectivity, high-ROI group of elite schools; (2) a broad middle tier of public universities; (3) a lower-ROI cluster of smaller regional institutions; (4) a cluster dominated by for-profit schools with the lowest median ROI.
+
+  \item \textbf{Geographic variation is real but secondary.} The Far West and New England lead in median ROI; the Plains and Outlying Areas lag — but geography explains less variance in earnings than field of study or institution type.
+\end{itemize}
+
+%% ─── 6. Dataset Issues ────────────────────────────────────────────────────────
+\section{Dataset Issues \& Challenges}
+
+\subsection{Privacy Suppression}
+
+The single biggest data quality issue. The Department of Education suppresses any cell based on fewer than 30 students and encodes it as the string \texttt{"PrivacySuppressed"} rather than a numeric \texttt{NA}. This requires explicit handling at load time:
+
+\begin{verbatim}
+read_csv(..., na = c("", "NA", "PrivacySuppressed"))
+\end{verbatim}
+
+If missed, numeric coercion silently produces \texttt{NA} \textit{without warning}, and any downstream analysis treats suppressed small-school data and truly missing data identically. The suppression is also \textbf{non-random} — it concentrates at smaller, less-selective, often for-profit institutions, which are exactly the schools most likely to have poor outcomes. This means complete-case analysis creates a \textit{survivorship bias}: schools with the worst outcomes are disproportionately dropped.
+
+\subsection{Dual Net Price Columns}
+
+Public institutions report net price in \texttt{NPT4\_PUB}; private institutions report it in \texttt{NPT4\_PRIV}. There is no single unified net price column. Failing to account for this before computing ROI produces incorrect values for roughly half the dataset.
+
+\subsection{Column Type Mismatch}
+
+Because of \texttt{PrivacySuppressed} values, nearly every numeric column loads as character type. All must be explicitly coerced with \texttt{as.numeric()} after NA conversion, or they are unusable in models.
+
+\subsection{High Missingness in Key Variables}
+
+\texttt{SAT\_AVG} is missing for a large fraction of institutions — schools that are test-optional or primarily community-college-adjacent do not report SAT scores. \texttt{ADM\_RATE} is similarly sparse. Because SAT and admission rate are central selectivity controls, any complete-case model automatically drops these institutions, skewing the analysis toward more selective schools.
+
+\subsection{Cohort Lag}
+
+\texttt{MD\_EARN\_WNE\_P10} reflects earnings 10 years after enrollment — meaning the March 2026 release covers students who enrolled roughly in 2015–2016. These graduates entered the labor market around 2019–2021, straddling the COVID-19 pandemic. Post-pandemic wage growth and structural labor market changes (remote work, tech layoffs, healthcare expansion) may not be captured in these figures.
+
+\subsection{Institution-Level Aggregation}
+
+All variables are aggregates across an entire institution. A school reporting 60\% STEM share and \$55,000 median earnings might have half its students in CS (earning \$90,000) and half in Education (earning \$38,000). The aggregate hides this bimodal distribution. Individual-level data would allow far more precise causal claims.
+
+\subsection{PCIP Field-Share Format}
+
+Field-of-study shares (\texttt{PCIP*}) represent the \textit{fraction of degrees} in each field, not headcount. Summing them is meaningful, but creating a \texttt{stem\_share} variable by summing 6 PCIP columns requires careful column selection (e.g., PCIP11 = CS, PCIP14 = Engineering, PCIP15 = Eng. Tech, PCIP26 = Biology, PCIP27 = Math, PCIP40 = Physical Sciences). Misidentifying the right CIP codes inflates or deflates the STEM proxy.
+
+%% ─── 7. Limitations ──────────────────────────────────────────────────────────
+\section{Study Limitations}
+
+\begin{enumerate}
+  \item \textbf{No causal identification.} The biggest limitation. Students who attend elite schools are not a random sample — they tend to be higher-ability, more motivated, and better-connected. The \textit{school effect} on earnings is impossible to cleanly separate from selection effects without randomized assignment or strong natural experiments. All findings describe associations, not causes.
+
+  \item \textbf{Missingness bias.} Suppressed values concentrate at smaller, less-selective, often struggling institutions. Complete-case analysis over-represents well-documented schools, which inflates apparent average ROI.
+
+  \item \textbf{Cohort confounding.} Ten-year earnings reflect graduates from 2015–2016 cohorts entering the post-2019 labor market — conditions that differ from what 2024 entrants will face.
+
+  \item \textbf{Ecological fallacy.} Institution-level aggregates mask enormous within-school variation in both costs (by income, aid type) and outcomes (by major, demographics, career path).
+
+  \item \textbf{STEM share as a proxy.} H3 uses an institution-level STEM-degree-share variable as a proxy for field of study. A rigorous test would require individual-level enrollment and earnings data by program. The current test conflates "institution has many STEM graduates" with "the student studying STEM earns more" — which is directionally correct but imprecise.
+
+  \item \textbf{Debt not included in ROI.} Our ROI metric is earnings-over-net-price only. It does not account for cumulative student loan debt or interest, which can substantially change the financial calculus — especially at schools where median debt (\texttt{DEBT\_MDN}) is high relative to net price.
+
+  \item \textbf{Regional earnings vary by cost of living.} \$55,000 in rural Mississippi has very different purchasing power than \$55,000 in San Francisco. The analysis does not adjust earnings for cost of living, which partly explains why Far West schools show high ROI — their graduates earn more nominally while living in high cost-of-living areas.
+
+  \item \textbf{Multicollinearity.} SAT score and admission rate are correlated ($r \approx -0.6$). Including both in the same model inflates standard errors and makes individual coefficient interpretation unstable. Stepwise selection partially addresses this, but does not eliminate the underlying collinearity.
+\end{enumerate}
+
+%% ─── 8. Alternate Methods ────────────────────────────────────────────────────
+\section{Alternative Methods Considered \& Why We Chose What We Did}
+
+\subsection{Regression: Why OLS with Stepwise?}
+
+\textbf{Alternatives considered:}
+
+\begin{itemize}
+  \item \textbf{Ridge / LASSO Regression:} Penalized regression methods handle multicollinearity better than OLS and can automatically shrink irrelevant predictors toward zero. LASSO performs built-in variable selection. \textit{Why not used:} Our predictor set is modest ($<$20 variables) and the analysis prioritizes interpretable coefficients for hypothesis testing. Ridge/LASSO regularization complicates direct inference on individual predictors (e.g., "does net price matter after controlling for SAT?"). OLS with stepwise AIC gives interpretable, testable coefficients.
+
+  \item \textbf{Random Forest / Gradient Boosting:} Tree-based ensemble methods typically achieve lower predictive RMSE and handle non-linearities and interactions automatically. \textit{Why not used:} This project emphasizes statistical inference (hypothesis testing, confidence intervals, p-values) over pure predictive accuracy. Tree models are black boxes — they cannot answer "does net price predict earnings after controlling for selectivity?" the way a regression coefficient can.
+
+  \item \textbf{Log-transformed outcome:} A log-earnings outcome would reduce heteroscedasticity and better satisfy OLS normality assumptions (earnings are right-skewed). \textit{Why not used as primary model:} Raw-dollar RMSE is more interpretable for stakeholders. Log-transformed RMSE is harder to communicate. We did create \texttt{log\_earnings} as a feature but used raw earnings as the outcome in the primary model.
+\end{itemize}
+
+\subsection{Classification: Why Logistic Regression?}
+
+\textbf{Alternatives considered:}
+
+\begin{itemize}
+  \item \textbf{Decision Trees / Random Forest:} Likely better predictive accuracy, can capture non-linear boundaries. \textit{Why not used:} Logistic regression produces probability scores and interpretable odds ratios, making it the natural classification counterpart to the OLS regression in Stage 4. With only $\sim$1,500 observations and $\sim$15 predictors, a simple logistic model is not at risk of underfitting. The course rubric also specifies logistic regression for classification.
+
+  \item \textbf{SVM / Naive Bayes:} Alternative classifiers with different bias-variance tradeoffs. \textit{Why not used:} No interpretability advantage over logistic regression for this problem. The goal is inference, not maximizing AUC at all costs.
+
+  \item \textbf{Threshold optimization:} The default 0.5 threshold may not be optimal if the costs of false positives and false negatives differ. \textit{Why not done:} With perfectly balanced classes (50/50 median split), the 0.5 threshold is appropriate. No asymmetric cost structure applies here.
+\end{itemize}
+
+\subsection{Dimensionality Reduction: Why PCA?}
+
+\textbf{Alternatives considered:}
+
+\begin{itemize}
+  \item \textbf{UMAP / t-SNE:} Non-linear dimensionality reduction methods that can reveal complex manifold structure in high-dimensional data. \textit{Why not used:} PCA's linear components are directly interpretable — PC1 and PC2 have known loadings on the original PCIP columns, allowing us to label axes ("STEM axis" vs. "Humanities axis"). UMAP embeddings are not interpretable in the same way.
+
+  \item \textbf{Factor Analysis:} Assumes an underlying latent factor structure driving observed correlations. PCA makes no such assumption — it simply maximizes explained variance. For a descriptive / exploratory purpose (grouping fields), PCA is more appropriate than confirmatory factor analysis.
+\end{itemize}
+
+\subsection{Clustering: Why K-Means?}
+
+\textbf{Alternatives considered:}
+
+\begin{itemize}
+  \item \textbf{Hierarchical Clustering:} Does not require specifying $k$ upfront; produces a dendrogram showing how clusters merge at each level. \textit{Why not used as primary:} Computationally expensive for $\sim$1,500 observations with 8 features. K-means with multiple random starts (\texttt{nstart = 25}) provides robust, reproducible clusters. The elbow method gives a principled way to choose $k$.
+
+  \item \textbf{DBSCAN:} Density-based clustering that can find non-spherical clusters and identify outliers as noise. \textit{Why not used:} Requires tuning two hyperparameters ($\varepsilon$ and min\_samples) that are hard to set without prior domain knowledge. K-means clusters align more cleanly with the existing public/private/for-profit taxonomy, making interpretation easier.
+
+  \item \textbf{Gaussian Mixture Models:} Probabilistic clustering with soft assignments. \textit{Why not used:} More complex to implement and explain. Hard cluster assignments from k-means suffice for the goal of finding interpretable institution archetypes.
+\end{itemize}
+
+%% ─── 9. What Can Be Improved ──────────────────────────────────────────────────
+\section{What Can Be Improved}
+
+\subsection{Data \& Features}
+
+\begin{itemize}
+  \item \textbf{Individual-level data:} The ideal dataset would have one row per student-year, including demographics, major, aid package, and eventual earnings. The College Scorecard aggregates suppress this. Linking the Scorecard to IRS earnings records (as the original Scorecard design intended) would enable far stronger causal claims.
+
+  \item \textbf{Cost of living adjustment:} Adjust earnings by regional CPI or local wage indices before computing ROI. This would make the geographic comparisons more meaningful and reduce the confounding effect of high-cost labor markets.
+
+  \item \textbf{Debt-adjusted ROI:} Replace or augment the simple ROI metric with one that accounts for loan repayment burden:
+    \[
+    \text{ROI}_{adj} = \frac{\text{Median Earnings} - \text{Annual Debt Repayment}}{\text{Net Price}}
+    \]
+
+  \item \textbf{Multiple imputation:} Use \texttt{mice} (Multiple Imputation by Chained Equations) instead of complete-case analysis to recover suppressed values and reduce missingness bias. This is especially important for SAT scores, which are missing in a non-random pattern.
+
+  \item \textbf{True field-of-study analysis:} Use the field-of-study file joined on OPEID to get program-level earnings (\texttt{EARN\_MDN\_5YR}), enabling H3 to be tested at the program level rather than using institution-level STEM share as a proxy.
+\end{itemize}
+
+\subsection{Modeling}
+
+\begin{itemize}
+  \item \textbf{Log-transformed outcome:} A log-earnings regression would reduce heteroscedasticity and better satisfy OLS assumptions. Residual diagnostics in the current model show increasing spread at higher predicted earnings.
+
+  \item \textbf{Interaction terms:} The effect of STEM share may differ by institution type (e.g., STEM matters more at public universities where STEM jobs are accessible nearby). Adding \texttt{inst\_type $\times$ stem\_share} interactions could reveal richer structure.
+
+  \item \textbf{Fixed effects for state:} State-level fixed effects would control for unmeasured state-specific factors (Pell grant generosity, local industry mix, K-12 quality) that confound school-level estimates. This is a stronger approach than the Census region dummies currently used.
+
+  \item \textbf{Geographically weighted regression:} Allows coefficients to vary across space, which would formalize the observation that the relationship between cost and earnings differs by region.
+
+  \item \textbf{Ensemble classification:} Adding a Random Forest or XGBoost classifier as a comparison would quantify how much predictive accuracy is sacrificed by using logistic regression. If the AUC gap is small, it validates the simpler model. If large, it suggests non-linear interactions are important.
+\end{itemize}
+
+\subsection{Scope \& Interpretation}
+
+\begin{itemize}
+  \item \textbf{Causal identification:} An instrumental variable (IV) or regression discontinuity (RD) design would enable causal claims. For example, using state financial aid eligibility thresholds as instruments for net price would allow estimating the causal effect of cost on post-graduation earnings.
+
+  \item \textbf{Heterogeneous effects by demographics:} The Scorecard includes earnings broken down by gender and Pell Grant recipient status. Analyzing whether the ROI patterns hold equally for low-income students vs. higher-income students would be highly policy-relevant.
+
+  \item \textbf{Time-series extension:} Multiple Scorecard vintage years could be joined to examine whether ROI trends have shifted over time — particularly before and after the COVID-19 pandemic.
+\end{itemize}
+
+%% ─── 10. Appendix ─────────────────────────────────────────────────────────────
+\section{Quick Reference: Variables \& Methods}
+
+\subsection{Key Variables}
+
+\begin{center}
+\begin{tabular}{p{3.5cm} p{6cm} p{3.5cm}}
+\toprule
+\textbf{Variable} & \textbf{Description} & \textbf{Role} \\
+\midrule
+\texttt{MD\_EARN\_WNE\_P10} & Median earnings 10 years after entry & Primary outcome \\
+\texttt{net\_price} & Unified avg. net price (pub/priv) & Key predictor \\
+\texttt{ROI} & Earnings / net price (engineered) & Analysis metric \\
+\texttt{ADM\_RATE} & Admission rate & Selectivity control \\
+\texttt{SAT\_AVG} & Average SAT score & Selectivity control \\
+\texttt{CONTROL} & Institution type (1/2/3) & Grouping variable \\
+\texttt{C150\_4} & 4-year graduation rate & Predictor (H4) \\
+\texttt{UGDS} & Total undergrad enrollment & Predictor \\
+\texttt{REGION} & Census geographic region & Predictor \\
+\texttt{PCIP*} & Degree share by field (26 fields) & Predictor set \\
+\texttt{DEBT\_MDN} & Median cumulative debt & Predictor \\
+\texttt{stem\_share} & Sum of STEM PCIP shares & Engineered feature \\
+\texttt{high\_roi} & Binary ROI label (median split) & Classification target \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{R Packages Used}
+
+\begin{itemize}
+  \item \textbf{tidyverse} — data wrangling, ggplot2 visualization
+  \item \textbf{MASS} — stepwise AIC selection (\textit{loaded before tidyverse to avoid masking \texttt{dplyr::select}})
+  \item \textbf{caret} — train/test split, cross-validation, confusion matrix
+  \item \textbf{pROC} — ROC curves and AUC
+  \item \textbf{corrplot} — correlation heatmap
+  \item \textbf{factoextra} — PCA and clustering visualizations
+  \item \textbf{scales} — dollar/comma formatting in plots
+  \item \textbf{knitr} / \textbf{kableExtra} — formatted PDF tables
+\end{itemize}
+
+\vspace{2cm}
+\hrule
+\vspace{0.3cm}
+{\small \textit{DS5110 — Data Management and Processing | Northeastern University | Spring 2026}\\
+Team: Sangeeth Deleep Menon, Benoy Joseph, Rohit Biju, Bryan Samuel James}
+
+\end{document}
